@@ -12,15 +12,14 @@ export interface ResidentState {
     class6: number;
 }
 
-export type StaffingRatioType = '4:1' | '5:1' | 'Other';
-// Revised Night Support Types
-export type NightShiftType = 'staff' | 'sleep_in' | 'on_call' | 'none'; // I, II, III, None
+export type StaffingRatioType = 'Ratio_I' | 'Ratio_II' | 'None'; // I=4:1(12:1), II=5:1(30:1), None=Base only
 export type ProfessionalStaffType = 'I' | 'II' | 'None';
 
 export interface SimulationConfig {
     regionalUnitPrice: number; // e.g., 10.00
     operatingDays: number; // 28-31, default 30
-    nightShiftType: NightShiftType; // Revised
+    nightStaffCount: number; // 1-4, Default 2
+    prevAvgUsers: number; // Calculation Basis for Staffing Ratio
     professionalStaffType: ProfessionalStaffType;
     treatmentImprovementRates: {
         treatment: number; // 処遇改善加算 (%)
@@ -29,7 +28,6 @@ export interface SimulationConfig {
     };
     residents: ResidentState;
     additionalPartTimeHours: number; // Hours/week
-    staffingRatioOverride: StaffingRatioType | 'Auto';
     hourlyRate: number; // Cost: Hourly Request
     socialInsuranceRate: number; // Cost: Social Insurance %
 }
@@ -49,42 +47,77 @@ export interface CalculationItem {
 export interface SimulationResult {
     totalResidents: number;
     totalFTE: number;
-    staffingRatioType: StaffingRatioType;
+    calculatedRatioType: StaffingRatioType; // Actual calculation used
+    nextTierHours: number | null; // Hours needed for next tier, null if max
     monthlyRevenue: number;
     monthlyPersonnelCost: number;
     monthlyProfit: number;
     breakdownRows: CalculationItem[];
-    nightSupportInfo: { label: string; unit: number }; // For UI hint
+    nightSupportInfo: { label: string; unit: string }; // For UI hint (Unit is variable now)
 }
 
-// --- Constants ---
+// --- Constants (FY2024 / R6 Revision) ---
 
-const BASE_UNITS_STANDARD = {
-    class6: 367, class5: 300, class4: 267, class3: 233, class2: 200, class1: 167
+// Base Reward (Service Fee I - 6:1 equivalent)
+const BASE_UNITS_R6 = {
+    class6: 600, class5: 456, class4: 372, class3: 297, class2: 188, class1: 171
 };
 
-const STAFFING_ADDITIONS = {
-    '4:1': { class6: 153, class5: 150, class4: 128, class3: 127, class2: 125, class1: 133 },
-    '5:1': { class6: 100, class5: 100, class4: 83, class3: 84, class2: 83, class1: 93 },
-    'Other': { class6: 0, class5: 0, class4: 0, class3: 0, class2: 0, class1: 0 }
+// Personnel Placement Addition (I & II)
+const STAFFING_ADDITIONS_R6 = {
+    // Type I (12:1 / approx 4:1 total)
+    'Ratio_I': {
+        high: 83, // Class 4, 5, 6
+        low: 77   // Class 1, 2, 3
+    },
+    // Type II (30:1 / approx 5:1 total)
+    'Ratio_II': {
+        high: 33,
+        low: 31
+    },
+    'None': { high: 0, low: 0 }
 };
 
-// R6 Revised Night Support Rates
-// Structure: Type -> Capacity Range -> Unit
-const NIGHT_SUPPORT_RATES = {
-    'staff': { // Type I (常駐)
-        small: 666,  // <= 7
-        medium: 281, // 8-20
-        large: 163   // >= 21
-    },
-    'sleep_in': { // Type II (宿直)
-        small: 380,
-        medium: 161,
-        large: 93
-    },
-    'on_call': { // Type III (体制III)
-        fixed: 10
-    }
+// Night Support Matrix (Type I)
+// Key: Total Users -> Value: { level4 (High), level3 (Mid), level2 (Low) }
+// Mapping Assumption: 
+//   Level 4 (High): Class 6, 5, 4
+//   Level 3 (Mid):  Class 3
+//   Level 2 (Low):  Class 2, 1
+const NIGHT_SUPPORT_MATRIX: Record<number, { level4: number, level3: number, level2: number }> = {
+    // <= 7 (Using 7's value for 1-7)
+    1: { level4: 672, level3: 560, level2: 448 },
+    2: { level4: 672, level3: 560, level2: 448 },
+    3: { level4: 448, level3: 373, level2: 299 },
+    4: { level4: 336, level3: 280, level2: 224 },
+    5: { level4: 269, level3: 224, level2: 179 },
+    6: { level4: 224, level3: 187, level2: 149 },
+    7: { level4: 192, level3: 160, level2: 128 },
+    // 8-20 range (Interpolated/Specifics)
+    8: { level4: 168, level3: 140, level2: 112 },
+    9: { level4: 149, level3: 124, level2: 99 }, // Extrapolated
+    10: { level4: 135, level3: 113, level2: 90 }, // Extrapolated
+    11: { level4: 122, level3: 102, level2: 81 }, // Extrapolated
+    12: { level4: 112, level3: 93, level2: 75 }, // Extrapolated
+    13: { level4: 103, level3: 86, level2: 69 },  // Extrapolated
+    14: { level4: 96, level3: 80, level2: 64 },   // Extrapolated
+    15: { level4: 90, level3: 75, level2: 60 },   // Provided
+    16: { level4: 84, level3: 70, level2: 56 },   // Provided (User specified)
+    17: { level4: 79, level3: 66, level2: 53 },   // Provided
+    18: { level4: 75, level3: 63, level2: 50 },   // Extrapolated
+    19: { level4: 71, level3: 59, level2: 47 },   // Extrapolated
+    20: { level4: 67, level3: 56, level2: 45 },   // Provided
+    // >= 21 (Using 30's val or extrapolated)
+    21: { level4: 64, level3: 53, level2: 43 },
+    22: { level4: 61, level3: 51, level2: 41 },
+    23: { level4: 58, level3: 48, level2: 39 },
+    24: { level4: 56, level3: 47, level2: 37 },
+    25: { level4: 54, level3: 45, level2: 36 },
+    26: { level4: 51, level3: 43, level2: 34 },
+    27: { level4: 50, level3: 42, level2: 33 },
+    28: { level4: 48, level3: 40, level2: 32 },
+    29: { level4: 46, level3: 38, level2: 31 },
+    30: { level4: 45, level3: 38, level2: 30 }, // Provided (Hypothetical)
 };
 
 const PROFESSIONAL_DAILY = {
@@ -102,7 +135,8 @@ export const useSimulationLogic = () => {
     const [config, setConfig] = useState<SimulationConfig>({
         regionalUnitPrice: 10.00,
         operatingDays: 30,
-        nightShiftType: 'staff', // Default I
+        nightStaffCount: 2,
+        prevAvgUsers: 10,
         professionalStaffType: 'None',
         treatmentImprovementRates: {
             treatment: 18.6,
@@ -111,7 +145,6 @@ export const useSimulationLogic = () => {
         },
         residents: { class1: 0, class2: 9, class3: 4, class4: 3, class5: 0, class6: 0 },
         additionalPartTimeHours: 0,
-        staffingRatioOverride: 'Auto',
         hourlyRate: 1200,
         socialInsuranceRate: 15.0,
     });
@@ -124,98 +157,172 @@ export const useSimulationLogic = () => {
 
     const results: SimulationResult = useMemo(() => {
         const rows: CalculationItem[] = [];
-        const { residents, additionalPartTimeHours, regionalUnitPrice, staffingRatioOverride, operatingDays, nightShiftType } = config;
+        const { residents, additionalPartTimeHours, regionalUnitPrice, operatingDays, nightStaffCount, prevAvgUsers } = config;
 
         // 1. Basic Stats
         const totalResidents = Object.values(residents).reduce((a, b) => a + b, 0);
         const totalFTE = FIXED_STAFF_FTE + (additionalPartTimeHours / 40);
 
-        // 2. Staffing Ratio
-        let ratioType: StaffingRatioType = 'Other';
-        if (staffingRatioOverride !== 'Auto') {
-            ratioType = staffingRatioOverride;
-        } else if (totalFTE > 0) {
-            const rawRatio = totalResidents / totalFTE;
-            if (rawRatio <= 4.0) ratioType = '4:1';
-            else if (rawRatio <= 5.0) ratioType = '5:1';
+        // 2. Staffing Ratio Determination (New 12:1 / 30:1 Logic)
+        let calculatedRatioType: StaffingRatioType = 'None';
+        let nextTierHours: number | null = null;
+
+        // Thresholds based on Prompt
+        const threshold_I = prevAvgUsers / 12; // 12:1
+        const threshold_II = prevAvgUsers / 30; // 30:1 (as requested)
+
+        // Logic (Always Auto)
+        if (totalFTE >= threshold_I) {
+            calculatedRatioType = 'Ratio_I';
+            nextTierHours = null; // Max tier
+        } else if (totalFTE >= threshold_II) {
+            calculatedRatioType = 'Ratio_II';
+            // Hours needed for Tier I
+            nextTierHours = Math.max(0, (threshold_I - totalFTE) * 40);
+        } else {
+            calculatedRatioType = 'None';
+            // Hours needed for Tier II
+            nextTierHours = Math.max(0, (threshold_II - totalFTE) * 40);
         }
 
-        // 3. Determine Night Support Unit
-        let nightUnit = 0;
-        let nightLabel = 'なし';
+        // 3. Determine Night Support Unit (Matrix Logic)
+        // Night Staff count effectively divides the unit size
+        const effectiveUnitSize = Math.ceil(totalResidents / nightStaffCount);
 
-        if (nightShiftType === 'staff') {
-            if (totalResidents <= 7) { nightUnit = NIGHT_SUPPORT_RATES.staff.small; nightLabel = '体制I (小規模)'; }
-            else if (totalResidents <= 20) { nightUnit = NIGHT_SUPPORT_RATES.staff.medium; nightLabel = '体制I (中規模)'; }
-            else { nightUnit = NIGHT_SUPPORT_RATES.staff.large; nightLabel = '体制I (大規模)'; }
-        } else if (nightShiftType === 'sleep_in') {
-            if (totalResidents <= 7) { nightUnit = NIGHT_SUPPORT_RATES.sleep_in.small; nightLabel = '体制II (小規模)'; }
-            else if (totalResidents <= 20) { nightUnit = NIGHT_SUPPORT_RATES.sleep_in.medium; nightLabel = '体制II (中規模)'; }
-            else { nightUnit = NIGHT_SUPPORT_RATES.sleep_in.large; nightLabel = '体制II (大規模)'; }
-        } else if (nightShiftType === 'on_call') {
-            nightUnit = NIGHT_SUPPORT_RATES.on_call.fixed;
-            nightLabel = '体制III (連絡体制)';
+        // Find row in matrix. Clamp to defined keys if necessary (1-30 are defined).
+        const nightRow = NIGHT_SUPPORT_MATRIX[Math.max(1, Math.min(30, effectiveUnitSize))] || NIGHT_SUPPORT_MATRIX[30];
+
+        // 4. Calculate Revenue Rows
+        let monthlyRevenue = 0; // Running total in Yen
+        let totalMonthlyUnits = 0; // Running total in Units (for Treatment Addition base)
+
+        // --- Base Reward ---
+        const BASE_KEYS = ['class6', 'class5', 'class4', 'class3', 'class2', 'class1'] as const;
+        BASE_KEYS.forEach(key => {
+            const count = residents[key];
+            if (count > 0) {
+                const unit = BASE_UNITS_R6[key];
+                const units = unit * operatingDays * count;
+                totalMonthlyUnits += units;
+
+                const subtotal = Math.floor(units * regionalUnitPrice);
+                monthlyRevenue += subtotal;
+
+                const labelCls = key.replace('class', '区分');
+                rows.push({
+                    id: `revenue-base-${key}`,
+                    category: 'Revenue',
+                    label: `基本報酬(I) [${labelCls}]`,
+                    formula: `${unit}単位 x ${operatingDays}日 x ${count}人`,
+                    unitPrice: unit,
+                    days: operatingDays,
+                    count: count,
+                    subtotal
+                });
+            }
+        });
+
+        // --- Staffing Addition (New Split Logic) ---
+        if (calculatedRatioType !== 'None') {
+            const countC1 = residents.class6 + residents.class5 + residents.class4; // Severe
+            const countC2 = residents.class3 + residents.class2 + residents.class1; // Mild
+
+            let unitC1 = 0;
+            let unitC2 = 0;
+            let labelBase = '';
+
+            if (calculatedRatioType === 'Ratio_I') {
+                // Type I (12:1)
+                unitC1 = STAFFING_ADDITIONS_R6.Ratio_I.high;
+                unitC2 = STAFFING_ADDITIONS_R6.Ratio_I.low;
+                labelBase = '人員配置体制加算(I)';
+            } else {
+                // Type II (30:1)
+                unitC1 = STAFFING_ADDITIONS_R6.Ratio_II.high;
+                unitC2 = STAFFING_ADDITIONS_R6.Ratio_II.low;
+                labelBase = '人員配置体制加算(II)';
+            }
+
+            // Row for C1 (Severe)
+            if (countC1 > 0) {
+                const units = unitC1 * operatingDays * countC1;
+                totalMonthlyUnits += units;
+
+                const sub = Math.floor(units * regionalUnitPrice);
+                monthlyRevenue += sub;
+
+                rows.push({
+                    id: 'revenue-staff-c1',
+                    category: 'Revenue',
+                    label: `${labelBase} [区分4以上]`,
+                    formula: `${unitC1}単位 x ${operatingDays}日 x ${countC1}人`,
+                    unitPrice: unitC1,
+                    days: operatingDays,
+                    count: countC1,
+                    subtotal: sub
+                });
+            }
+
+            // Row for C2 (Mild)
+            if (countC2 > 0) {
+                const units = unitC2 * operatingDays * countC2;
+                totalMonthlyUnits += units;
+
+                const sub = Math.floor(units * regionalUnitPrice);
+                monthlyRevenue += sub;
+
+                rows.push({
+                    id: 'revenue-staff-c2',
+                    category: 'Revenue',
+                    label: `${labelBase} [区分3以下]`,
+                    formula: `${unitC2}単位 x ${operatingDays}日 x ${countC2}人`,
+                    unitPrice: unitC2,
+                    days: operatingDays,
+                    count: countC2,
+                    subtotal: sub
+                });
+            }
         }
 
+        // 5. Night Support & Professional Staff
         const profUnit = PROFESSIONAL_DAILY[config.professionalStaffType];
 
-        let totalMonthlyUnits = 0;
-
-        // Iterate Residents
         (Object.keys(residents) as Array<keyof ResidentState>).forEach(cls => {
             const count = residents[cls];
             if (count === 0) return;
 
             const labelCls = cls.replace('class', '区分');
 
-            // A. Base
-            const baseDaily = BASE_UNITS_STANDARD[cls] || 0;
-            const baseLineUnits = baseDaily * operatingDays * count;
-            totalMonthlyUnits += baseLineUnits;
+            // C. Night Support (Matrix I)
+            let nightUnit = 0;
+            let levelLabel = '';
 
-            rows.push({
-                id: `revenue-base-${cls}`,
-                label: `[${labelCls}] 基本報酬`,
-                unitPrice: baseDaily,
-                days: operatingDays,
-                count: count,
-                formula: `${baseDaily}単位 x ${operatingDays}日 x ${count}人`,
-                subtotal: Math.floor(baseLineUnits * regionalUnitPrice),
-                category: 'Revenue',
-            });
-
-            // B. Staffing Addition
-            // @ts-ignore
-            const staffingAdd = STAFFING_ADDITIONS[ratioType][cls] || 0;
-            if (staffingAdd > 0) {
-                const staffingLineUnits = staffingAdd * operatingDays * count;
-                totalMonthlyUnits += staffingLineUnits;
-
-                rows.push({
-                    id: `revenue-staff-${cls}`,
-                    label: `[${labelCls}] 人員配置体制加算 (${ratioType})`,
-                    unitPrice: staffingAdd,
-                    days: operatingDays,
-                    count: count,
-                    formula: `${staffingAdd}単位 x ${operatingDays}日 x ${count}人`,
-                    subtotal: Math.floor(staffingLineUnits * regionalUnitPrice),
-                    category: 'Revenue',
-                });
+            if (['class6', 'class5', 'class4'].includes(cls)) {
+                nightUnit = nightRow.level4;
+                levelLabel = '(L4)';
+            } else if (cls === 'class3') {
+                nightUnit = nightRow.level3;
+                levelLabel = '(L3)';
+            } else {
+                nightUnit = nightRow.level2;
+                levelLabel = '(L2)';
             }
 
-            // C. Night Support (Per Resident)
             if (nightUnit > 0) {
                 const nightLineUnits = nightUnit * operatingDays * count;
                 totalMonthlyUnits += nightLineUnits;
 
+                const nightSubtotal = Math.floor(nightLineUnits * regionalUnitPrice);
+                monthlyRevenue += nightSubtotal;
+
                 rows.push({
                     id: `revenue-night-${cls}`,
-                    label: `[${labelCls}] 夜間支援等体制加算 (${nightLabel})`,
+                    label: `[${labelCls}] 夜間支援加算(I) ${levelLabel}`,
                     unitPrice: nightUnit,
                     days: operatingDays,
                     count: count,
                     formula: `${nightUnit}単位 x ${operatingDays}日 x ${count}人`,
-                    subtotal: Math.floor(nightLineUnits * regionalUnitPrice),
+                    subtotal: nightSubtotal,
                     category: 'Revenue',
                 });
             }
@@ -225,6 +332,9 @@ export const useSimulationLogic = () => {
                 const profLineUnits = profUnit * operatingDays * count;
                 totalMonthlyUnits += profLineUnits;
 
+                const profSubtotal = Math.floor(profLineUnits * regionalUnitPrice);
+                monthlyRevenue += profSubtotal;
+
                 rows.push({
                     id: `revenue-prof-${cls}`,
                     label: `[${labelCls}] 福祉専門職員配置等加算 (${config.professionalStaffType})`,
@@ -232,7 +342,7 @@ export const useSimulationLogic = () => {
                     days: operatingDays,
                     count: count,
                     formula: `${profUnit}単位 x ${operatingDays}日 x ${count}人`,
-                    subtotal: Math.floor(profLineUnits * regionalUnitPrice),
+                    subtotal: profSubtotal,
                     category: 'Revenue',
                 });
             }
@@ -241,24 +351,26 @@ export const useSimulationLogic = () => {
         // Treatment Imp
         const { treatment, special, baseUp } = config.treatmentImprovementRates;
         const totalRate = treatment + special + baseUp;
-        const baseRewardYen = Math.floor(totalMonthlyUnits * regionalUnitPrice);
+
+        // Base separate calculation for Treatment (usually calculated on total units * regional price)
+        const baseRewardYenForTreatment = Math.floor(totalMonthlyUnits * regionalUnitPrice);
         let treatmentAmount = 0;
 
         if (totalRate > 0) {
-            treatmentAmount = Math.floor(baseRewardYen * (totalRate / 100));
+            treatmentAmount = Math.floor(baseRewardYenForTreatment * (totalRate / 100));
+            monthlyRevenue += treatmentAmount; // Add to final total
+
             rows.push({
                 id: 'add-treatment',
                 label: `処遇改善加算等 (計${totalRate}%)`,
                 unitPrice: '-',
                 days: '-',
                 count: '-',
-                formula: `${totalMonthlyUnits.toLocaleString()}単位 (${baseRewardYen.toLocaleString()}円) x ${totalRate}%`,
+                formula: `${totalMonthlyUnits.toLocaleString()}単位 (${baseRewardYenForTreatment.toLocaleString()}円) x ${totalRate}%`,
                 subtotal: treatmentAmount,
                 category: 'Revenue',
             });
         }
-
-        const monthlyRevenue = baseRewardYen + treatmentAmount;
 
         // Cost
         let costSubtotal = 0;
@@ -295,12 +407,16 @@ export const useSimulationLogic = () => {
         return {
             totalResidents,
             totalFTE,
-            staffingRatioType: ratioType,
+            calculatedRatioType, // Actual used for calc
+            nextTierHours,
             monthlyRevenue,
             monthlyPersonnelCost,
             monthlyProfit: monthlyRevenue - monthlyPersonnelCost,
             breakdownRows: rows,
-            nightSupportInfo: { label: nightLabel, unit: nightUnit }
+            nightSupportInfo: {
+                label: `夜勤${nightStaffCount}名 (規模${effectiveUnitSize}名)`,
+                unit: '表参照'
+            }
         };
 
     }, [config]);
