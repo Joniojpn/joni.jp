@@ -7,21 +7,16 @@ import { Settings, Users, ArrowRight, AlertTriangle, TrendingUp, DollarSign, Cal
 
 export const SimulatorDashboard: React.FC = () => {
     const {
-        residents,
-        setResidents,
-        additionalPartTimeHours,
-        setAdditionalPartTimeHours,
-        costSettings,
-        setCostSettings,
-        additionSettings,
-        setAdditionSettings,
+        config,
+        setConfigField,
+        setResident,
         results,
     } = useSimulationLogic();
 
     const [showDetails, setShowDetails] = useState(false);
 
     const handleResidentChange = (cls: keyof ResidentState, val: number) => {
-        setResidents(prev => ({ ...prev, [cls]: Math.max(0, val) }));
+        setResident(cls, val);
     };
 
     return (
@@ -40,7 +35,7 @@ export const SimulatorDashboard: React.FC = () => {
                             <Users className="w-5 h-5 mr-2" /> 利用者構成 (現在の空き: {30 - results.totalResidents}床)
                         </h2>
                         <div className="space-y-4">
-                            {(Object.keys(residents) as Array<keyof ResidentState>).map((cls) => (
+                            {(Object.keys(config.residents) as Array<keyof ResidentState>).map((cls) => (
                                 <div key={cls} className="flex items-center justify-between">
                                     <label className="text-sm font-medium text-gray-600 w-24">
                                         {cls.replace('class', '区分')}
@@ -49,13 +44,13 @@ export const SimulatorDashboard: React.FC = () => {
                                         type="range"
                                         min="0"
                                         max="15"
-                                        value={residents[cls]}
+                                        value={config.residents[cls]}
                                         onChange={(e) => handleResidentChange(cls, parseInt(e.target.value))}
                                         className="flex-1 mx-4 h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer accent-blue-600"
                                     />
                                     <input
                                         type="number"
-                                        value={residents[cls]}
+                                        value={config.residents[cls]}
                                         onChange={(e) => handleResidentChange(cls, parseInt(e.target.value))}
                                         className="w-16 p-1 text-center border rounded-md"
                                     />
@@ -79,16 +74,16 @@ export const SimulatorDashboard: React.FC = () => {
                                     min="0"
                                     max="200"
                                     step="1"
-                                    value={additionalPartTimeHours}
-                                    onChange={(e) => setAdditionalPartTimeHours(parseInt(e.target.value))}
+                                    value={config.additionalPartTimeHours}
+                                    onChange={(e) => setConfigField('additionalPartTimeHours', parseInt(e.target.value))}
                                     className="flex-1 mr-4 h-2 bg-green-100 rounded-lg appearance-none cursor-pointer accent-green-600"
                                 />
                                 <span className="text-lg font-bold text-green-700 w-20 text-right">
-                                    {additionalPartTimeHours}h
+                                    {config.additionalPartTimeHours}h
                                 </span>
                             </div>
                             <p className="text-xs text-gray-500 mt-1">
-                                常勤換算: +{(additionalPartTimeHours / 40).toFixed(2)} 人
+                                常勤換算: +{(config.additionalPartTimeHours / 40).toFixed(2)} 人
                             </p>
                         </div>
 
@@ -106,8 +101,8 @@ export const SimulatorDashboard: React.FC = () => {
                                         <label className="block text-gray-600 mb-1">時給 (円)</label>
                                         <input
                                             type="number"
-                                            value={costSettings.hourlyRate}
-                                            onChange={(e) => setCostSettings({ ...costSettings, hourlyRate: parseInt(e.target.value) })}
+                                            value={config.hourlyRate}
+                                            onChange={(e) => setConfigField('hourlyRate', parseInt(e.target.value))}
                                             className="w-full p-2 border rounded"
                                         />
                                     </div>
@@ -115,8 +110,8 @@ export const SimulatorDashboard: React.FC = () => {
                                         <label className="block text-gray-600 mb-1">法定福利費 (%)</label>
                                         <input
                                             type="number"
-                                            value={costSettings.socialInsuranceRate}
-                                            onChange={(e) => setCostSettings({ ...costSettings, socialInsuranceRate: parseFloat(e.target.value) })}
+                                            value={config.socialInsuranceRate}
+                                            onChange={(e) => setConfigField('socialInsuranceRate', parseFloat(e.target.value))}
                                             className="w-full p-2 border rounded"
                                         />
                                     </div>
@@ -124,8 +119,8 @@ export const SimulatorDashboard: React.FC = () => {
                                 <div className="flex items-center space-x-2">
                                     <input
                                         type="checkbox"
-                                        checked={additionSettings.nightSupportTypeI}
-                                        onChange={(e) => setAdditionSettings({ ...additionSettings, nightSupportTypeI: e.target.checked })}
+                                        checked={config.nightSupportTypeI}
+                                        onChange={(e) => setConfigField('nightSupportTypeI', e.target.checked)}
                                         id="nightSupport"
                                     />
                                     <label htmlFor="nightSupport">夜間支援等体制加算（Ⅰ）</label>
@@ -222,17 +217,33 @@ export const SimulatorDashboard: React.FC = () => {
                             <div>
                                 <h4 className="font-bold text-gray-700 mb-2 border-b pb-1">売上内訳</h4>
                                 <div className="space-y-1 text-gray-600">
-                                    <p className="font-semibold">基本報酬 (日額 × 30日)</p>
-                                    <ul className="list-disc pl-5 mb-2">
-                                        {results.calculationDetails.revenue.baseBreakdown.map((item, i) => (
-                                            <li key={i}>{item}</li>
-                                        ))}
+                                    <p className="font-semibold">基本報酬</p>
+                                    <ul className="pl-0 space-y-2 mb-4">
+                                        {results.breakdownRows
+                                            .filter(r => r.category === 'Revenue' && r.id.startsWith('revenue-base'))
+                                            .map((item) => (
+                                                <li key={item.id} className="text-sm border-b border-gray-100 pb-1">
+                                                    <div className="flex justify-between">
+                                                        <span>{item.label}</span>
+                                                        <span className="font-medium">¥{item.subtotal.toLocaleString()}</span>
+                                                    </div>
+                                                    <div className="text-xs text-gray-400">{item.formula}</div>
+                                                </li>
+                                            ))}
                                     </ul>
                                     <p className="font-semibold pt-2">加算</p>
-                                    <ul className="list-disc pl-5">
-                                        {results.calculationDetails.revenue.additionsBreakdown.map((item, i) => (
-                                            <li key={i}>{item}</li>
-                                        ))}
+                                    <ul className="pl-0 space-y-2">
+                                        {results.breakdownRows
+                                            .filter(r => r.category === 'Revenue' && !r.id.startsWith('revenue-base'))
+                                            .map((item) => (
+                                                <li key={item.id} className="text-sm border-b border-gray-100 pb-1">
+                                                    <div className="flex justify-between">
+                                                        <span>{item.label}</span>
+                                                        <span className="font-medium">¥{item.subtotal.toLocaleString()}</span>
+                                                    </div>
+                                                    <div className="text-xs text-gray-400">{item.formula}</div>
+                                                </li>
+                                            ))}
                                     </ul>
                                     <div className="mt-2 pt-2 border-t border-dashed flex justify-between font-bold text-gray-800">
                                         <span>売上計</span>
@@ -245,17 +256,19 @@ export const SimulatorDashboard: React.FC = () => {
                             <div>
                                 <h4 className="font-bold text-gray-700 mb-2 border-b pb-1">コスト内訳</h4>
                                 <div className="space-y-1 text-gray-600">
-                                    <div className="flex justify-between">
-                                        <span>固定人件費 (管理者・サビ管・夜勤等)</span>
-                                        <span>¥{results.calculationDetails.cost.fixed.toLocaleString()}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>追加変動費</span>
-                                        <span>¥{results.calculationDetails.cost.variable.toLocaleString()}</span>
-                                    </div>
-                                    <div className="text-xs text-gray-500 pl-4 border-l-2 border-gray-100 ml-1">
-                                        {results.calculationDetails.cost.variableBreakdown}
-                                    </div>
+                                    <ul className="pl-0 space-y-2">
+                                        {results.breakdownRows
+                                            .filter(r => r.category === 'Cost')
+                                            .map((item) => (
+                                                <li key={item.id} className="text-sm border-b border-gray-100 pb-1">
+                                                    <div className="flex justify-between">
+                                                        <span>{item.label}</span>
+                                                        <span className="font-medium">¥{item.subtotal.toLocaleString()}</span>
+                                                    </div>
+                                                    <div className="text-xs text-gray-400">{item.formula}</div>
+                                                </li>
+                                            ))}
+                                    </ul>
                                     <div className="mt-2 pt-2 border-t border-dashed flex justify-between font-bold text-gray-800">
                                         <span>コスト計</span>
                                         <span>¥{results.monthlyPersonnelCost.toLocaleString()}</span>

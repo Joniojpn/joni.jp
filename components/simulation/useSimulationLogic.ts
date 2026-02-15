@@ -30,6 +30,7 @@ export interface SimulationConfig {
     additionalPartTimeHours: number; // Hours/week
     hourlyRate: number; // Cost: Hourly Request
     socialInsuranceRate: number; // Cost: Social Insurance %
+    nightSupportTypeI: boolean; // Addtion: Night Support Type I toggle
 }
 
 export interface CalculationItem {
@@ -47,6 +48,8 @@ export interface CalculationItem {
 export interface SimulationResult {
     totalResidents: number;
     totalFTE: number;
+    staffingRatio: number; // Calculated Ratio (Residents / FTE)
+    staffingRatioType: string; // "4:1" etc (UI Label)
     calculatedRatioType: StaffingRatioType; // Actual calculation used
     nextTierHours: number | null; // Hours needed for next tier, null if max
     monthlyRevenue: number;
@@ -147,6 +150,7 @@ export const useSimulationLogic = () => {
         additionalPartTimeHours: 0,
         hourlyRate: 1200,
         socialInsuranceRate: 15.0,
+        nightSupportTypeI: true,
     });
 
     const setResident = (cls: keyof ResidentState, val: number) =>
@@ -163,24 +167,32 @@ export const useSimulationLogic = () => {
         const totalResidents = Object.values(residents).reduce((a, b) => a + b, 0);
         const totalFTE = FIXED_STAFF_FTE + (additionalPartTimeHours / 40);
 
+        // Ratio for display (Residents / FTE)
+        // Avoid division by zero
+        const staffingRatio = totalFTE > 0 ? parseFloat((totalResidents / totalFTE).toFixed(2)) : 0;
+
         // 2. Staffing Ratio Determination (New 12:1 / 30:1 Logic)
         let calculatedRatioType: StaffingRatioType = 'None';
+        let staffingRatioType = 'None';
         let nextTierHours: number | null = null;
 
         // Thresholds based on Prompt
-        const threshold_I = prevAvgUsers / 12; // 12:1
-        const threshold_II = prevAvgUsers / 30; // 30:1 (as requested)
+        const threshold_I = prevAvgUsers / 12; // 12:1 (Actually 4:1 total)
+        const threshold_II = prevAvgUsers / 30; // 30:1 (Actually 5:1 total)
 
         // Logic (Always Auto)
         if (totalFTE >= threshold_I) {
             calculatedRatioType = 'Ratio_I';
+            staffingRatioType = '4:1';
             nextTierHours = null; // Max tier
         } else if (totalFTE >= threshold_II) {
             calculatedRatioType = 'Ratio_II';
+            staffingRatioType = '5:1';
             // Hours needed for Tier I
             nextTierHours = Math.max(0, (threshold_I - totalFTE) * 40);
         } else {
             calculatedRatioType = 'None';
+            staffingRatioType = '基準外';
             // Hours needed for Tier II
             nextTierHours = Math.max(0, (threshold_II - totalFTE) * 40);
         }
@@ -294,37 +306,40 @@ export const useSimulationLogic = () => {
             const labelCls = cls.replace('class', '区分');
 
             // C. Night Support (Matrix I)
-            let nightUnit = 0;
-            let levelLabel = '';
+            // Checked against config toggle
+            if (config.nightSupportTypeI) {
+                let nightUnit = 0;
+                let levelLabel = '';
 
-            if (['class6', 'class5', 'class4'].includes(cls)) {
-                nightUnit = nightRow.level4;
-                levelLabel = '(L4)';
-            } else if (cls === 'class3') {
-                nightUnit = nightRow.level3;
-                levelLabel = '(L3)';
-            } else {
-                nightUnit = nightRow.level2;
-                levelLabel = '(L2)';
-            }
+                if (['class6', 'class5', 'class4'].includes(cls)) {
+                    nightUnit = nightRow.level4;
+                    levelLabel = '(L4)';
+                } else if (cls === 'class3') {
+                    nightUnit = nightRow.level3;
+                    levelLabel = '(L3)';
+                } else {
+                    nightUnit = nightRow.level2;
+                    levelLabel = '(L2)';
+                }
 
-            if (nightUnit > 0) {
-                const nightLineUnits = nightUnit * operatingDays * count;
-                totalMonthlyUnits += nightLineUnits;
+                if (nightUnit > 0) {
+                    const nightLineUnits = nightUnit * operatingDays * count;
+                    totalMonthlyUnits += nightLineUnits;
 
-                const nightSubtotal = Math.floor(nightLineUnits * regionalUnitPrice);
-                monthlyRevenue += nightSubtotal;
+                    const nightSubtotal = Math.floor(nightLineUnits * regionalUnitPrice);
+                    monthlyRevenue += nightSubtotal;
 
-                rows.push({
-                    id: `revenue-night-${cls}`,
-                    label: `[${labelCls}] 夜間支援加算(I) ${levelLabel}`,
-                    unitPrice: nightUnit,
-                    days: operatingDays,
-                    count: count,
-                    formula: `${nightUnit}単位 x ${operatingDays}日 x ${count}人`,
-                    subtotal: nightSubtotal,
-                    category: 'Revenue',
-                });
+                    rows.push({
+                        id: `revenue-night-${cls}`,
+                        label: `[${labelCls}] 夜間支援加算(I) ${levelLabel}`,
+                        unitPrice: nightUnit,
+                        days: operatingDays,
+                        count: count,
+                        formula: `${nightUnit}単位 x ${operatingDays}日 x ${count}人`,
+                        subtotal: nightSubtotal,
+                        category: 'Revenue',
+                    });
+                }
             }
 
             // D. Prof
@@ -407,6 +422,8 @@ export const useSimulationLogic = () => {
         return {
             totalResidents,
             totalFTE,
+            staffingRatio,
+            staffingRatioType,
             calculatedRatioType, // Actual used for calc
             nextTierHours,
             monthlyRevenue,
