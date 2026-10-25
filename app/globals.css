@@ -1,6 +1,11 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
+/* ライト固定。旧ブログ（Hugo テーマ "odds"）がライト専用のデザインなので、
+ * OS のダークモードには追従しない。color-scheme でスクロールバーや
+ * フォーム部品まで含めてライトに固定する。 */
 :root {
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #171717;
 }
@@ -8,19 +13,858 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-geist-sans), var(--font-noto-sans-jp);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), var(--font-noto-sans-jp), "Hiragino Sans", "Yu Gothic",
+    sans-serif;
+}
+
+/* ===========================================================================
+ * 旧 Hugo テーマ "odds" のクラス（hugo-blog/themes/odds/static/css/style.css から移植）
+ *
+ * 移行スクリプト（scripts/migrate-hugo.mjs）が well_dash / point / table-wrap
+ * などをそのままの class 名で吐くので、記事を流し込んだ時点で旧ブログと同じ見た目に
+ * なるようにしてある。旧テーマの容れ物は .post_content、こちらは .prose。
+ *
+ * 旧記事での使用回数（content 実測）:
+ *   table-wrap 745 / final_update 180 / well_dash 106(+ショートコード244ブロック)
+ *   well_g 5 / related 4 / point 32(ショートコード)
+ * 未使用だったもの（.wl_red 等の色違い、.under 系のマーカー）は移植していない。
+ * ======================================================================== */
+
+:root {
+  /* style.css:49 --baseColor */
+  --odds-base: #2f496e;
+  --odds-shadow: 0 1px 3px 0 rgba(195, 195, 195, 0.3);
+  /* style.css:523 見出し用の和文フォントスタック */
+  --odds-heading-font: "Hiragino Sans", "ヒラギノ角ゴ ProN", "Hiragino Kaku Gothic ProN", "游ゴシック",
+    YuGothic, "メイリオ", Meiryo, sans-serif;
+}
+
+/* --- 見出し（style.css:521-546）
+ * prose 側の見出しは :where() 指定で詳細度0なので、こちらが素直に勝つ。 */
+
+.prose :is(h1, h2, h3, h4, h5, h6) {
+  clear: both;
+  margin: 0 0 10px;
+  padding: 10px 0 0;
+  line-height: 1.4;
+  font-weight: 500;
+  font-family: var(--odds-heading-font);
+}
+
+.prose h1 {
+  font-size: 150%;
+}
+
+/* h2: 上にテーマ色の2px罫、薄いグレーの地。1文字目だけ大きく色を変える */
+.prose h2 {
+  margin: 3em 0 1.5em;
+  padding: 1.1em 0.9em 1em;
+  font-size: 24px;
+  font-weight: 700;
+  border-top: 2px solid var(--odds-base);
+  border-bottom: 1px solid #ddd;
+  background: #fafafa;
+  box-shadow: 0 1px 2px #f7f7f7;
+}
+
+.prose h2::first-letter {
+  font-size: 2rem;
+  color: #8c4756;
+}
+
+/* h3: テーマ色のベタ帯に白抜き。下辺に吹き出しの三角が付く */
+.prose h3 {
+  clear: both;
+  display: block;
+  position: relative;
+  z-index: 0;
+  margin: 70px 0 22px;
+  padding: 0.5em 18px;
+  width: auto;
+  min-width: 115px;
+  background: var(--odds-base);
+  color: #fff;
+  text-align: left;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.6;
+  border-bottom: 0;
+}
+
+.prose h3::after {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  left: 30px;
+  margin-left: -10px;
+  display: block;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 10px 10px 0 10px;
+  border-color: var(--odds-base) transparent transparent transparent;
+}
+
+/* h4: 左にテーマ色の8pxバー、下に点線 */
+.prose h4 {
+  position: relative;
+  margin: 50px 0 25px;
+  padding: 0.5em;
+  border-left: 8px solid var(--odds-base);
+  line-height: 1.2;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.prose h4::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 0;
+  border-bottom: 1px dotted #ddd;
+}
+
+/* h5: 旧テーマは Material Icons の check（\e5ca）を頭に置いていた。
+ * そのフォントは読み込んでいないので、同じ字形の Unicode で代用している。 */
+.prose h5 {
+  position: relative;
+  margin-bottom: -25px;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.prose h5::before {
+  content: "✓";
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 10px;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--odds-base);
+}
+
+.prose h6 {
+  font-size: 100%;
+}
+
+/* 見出しの中では prose の擬似要素（引用符など）や色指定を持ち込まない */
+.prose :is(h2, h3, h4, h5, h6) a {
+  color: inherit;
+}
+
+/* --- 囲みボックス（style.css:553-557） --- */
+
+.prose .well_dash {
+  margin: 2em 0 2.5em;
+  padding: 1.2em 1.5em 0.8em;
+  line-height: 2;
+  border: 1px dashed #cdcdcd;
+  background: #fcfcfc;
+  box-shadow: var(--odds-shadow);
+}
+
+.prose .well_b {
+  margin: 2em 0 2.5em;
+  padding: 1em 1.5em;
+  line-height: 2;
+  border: 1px dashed #4865b2;
+  background: #f8f9ff;
+  box-shadow: var(--odds-shadow);
+}
+
+.prose .well_g {
+  margin: 2em 0 2.5em;
+  padding: 1em 1.5em;
+  line-height: 2;
+  border: 5px solid #e7e7e7;
+  border-radius: 10px;
+  box-shadow: var(--odds-shadow);
+}
+
+.prose .well_g p {
+  margin: 0.5em 0 0.2em;
+}
+
+/* 旧記事は well_* の中に <ul> なしの裸の <li> を書いていることが多い。
+ * 旧テーマは .post_content ul のインデントに頼っていたので、それを補う。 */
+.prose :is(.well_dash, .well_b, .well_g, .point, .related) li {
+  margin-left: 1.3em;
+  line-height: 2.4;
+  list-style: disc outside;
+}
+
+/* --- POINT ボックス（style.css:566-567）左上に「POINT」のリボンが乗る --- */
+
+.prose .point {
+  position: relative;
+  margin: 40px 0;
+  padding: 8px 15px 5px 20px;
+  border: 2px solid var(--odds-base);
+}
+
+.prose .point::after {
+  content: "POINT";
+  position: absolute;
+  top: -8px;
+  left: 10px;
+  padding: 0 10px;
+  background: var(--background);
+  font-size: 12px;
+  color: var(--odds-base);
+}
+
+/* --- 関連記事ボックス（style.css:570-572） --- */
+
+.prose .related {
+  position: relative;
+  margin: 40px 0;
+  padding: 22px 15px 15px 20px;
+  border: 2px solid var(--odds-base);
+}
+
+.prose .related::after {
+  content: "関連記事";
+  position: absolute;
+  top: -8px;
+  left: 10px;
+  padding: 0 10px;
+  background: var(--background);
+  font-size: 14px;
+  color: var(--odds-base);
+}
+
+.prose .related ul {
+  margin: 0 0 0 1.3em;
+  list-style: disc outside;
+}
+
+/* --- 表（style.css:586-590）
+ * 旧記事の <table> 746個のうち 745個が .table-wrap の中にあるので、
+ * 旧テーマの罫線はここに閉じ込める。新しい記事の Markdown 表は prose 既定のまま。 */
+
+.prose .table-wrap {
+  overflow-x: auto;
+  margin: 1.5em 0;
+}
+
+.prose .table-wrap table {
+  margin: 0 0 24px;
+  font-size: 14px;
+}
+
+.prose .table-wrap :is(td, th) {
+  border: 1px solid #bbb;
+  padding: 10px 15px;
+  line-height: 2.4;
+  background: #fff;
+}
+
+.prose .table-wrap th {
+  background: #ddd;
+  font-weight: normal;
+}
+
+.prose .table-wrap table.table_no_border :is(td, th) {
+  border: none;
+  padding-left: 0;
+}
+
+.prose .table-wrap table.table_border_horizontal :is(td, th) {
+  border-left: none;
+  border-right: none;
+  padding-left: 0;
+}
+
+/* --- セクション誘導ボタン（style.css:602-614） --- */
+
+.prose .reference-btn {
+  margin-top: 100px;
+  text-align: center;
+}
+
+.prose .btn-flat-border {
+  display: inline-block;
+  padding: 0.5em 1em;
+  border: 2px solid var(--odds-base);
+  border-radius: 5px;
+  color: var(--odds-base);
+  text-decoration: none;
+  transition: 0.4s;
+}
+
+.prose .btn-flat-border:hover {
+  background: var(--odds-base);
+  color: #fff;
+}
+
+/* --- 最終更新日（style.css:497-499）
+ * 旧テーマは Material Icons のカレンダー字形を ::before で足していたが、
+ * そのフォントは読み込んでいないので省いた。 */
+
+.prose .final_update {
+  text-align: right;
+}
+
+.prose .final_update p {
+  margin: -15px 0;
+}
+
+/* --- 画像（style.css:563）旧ブログは本文画像を中央寄せしていた --- */
+
+.prose img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  margin-inline: auto;
+}
+
+/* 見出しアンカー（rehype-autolink-headings）
+ * h3 は地がテーマ色のベタ塗りなので、固定色ではなく見出しの文字色を継ぐ。 */
+.prose .heading-anchor {
+  margin-left: 0.4em;
+  color: currentColor;
+  font-weight: 400;
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.prose :is(h1, h2, h3, h4, h5, h6):hover .heading-anchor {
+  opacity: 0.45;
+}
+
+/* rehype-pretty-code（github-light 単色。keepBackground: false なので背景はここで指定） */
+.prose pre {
+  background: var(--color-gray-100);
+  padding: 1em 1.25em;
+  overflow-x: auto;
+}
+
+.prose pre code {
+  display: grid;
+  background: transparent;
+  padding: 0;
+}
+
+.prose pre code [data-line] {
+  padding: 0 0.25em;
+}
+
+/* ===========================================================================
+ * 旧テーマ "odds" のヘッダー・レイアウト・サイドバー
+ * （style.css:69-131 / 260-345 から移植。数値は原則そのまま）
+ *
+ * 原典との差:
+ *   - Material Icons は読み込んでいないので、字形を Unicode で代用
+ *     （\e5cc「›」/ \e5cf「▾」/ \e5ce「▴」）
+ *   - jQuery のホバー slideDown は CSS の :hover 展開に、
+ *     アーカイブのクリック展開は React の state（ArchiveDropdown）に置き換え
+ *   - 旧 responsive.css（333行）は移植せず、1190px 未満では素直に縦積みにした
+ * ======================================================================== */
+
+:root {
+  /* style.css:50-51 */
+  --odds-active: #011a27;
+  --odds-hover: #8c4756;
+}
+
+/* --- レイアウト骨格（style.css:69-73） --- */
+
+.odds-header {
+  height: 100px;
+  width: 100%;
+  position: relative;
+  z-index: 20;
+  background-color: var(--odds-base);
+}
+
+.odds-header__inner {
+  height: 100px;
+  width: 1150px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.odds-main {
+  width: 1150px;
+  margin: 80px auto 100px;
+  display: flex;
+  gap: 55px;
+}
+
+.odds-main__left {
+  width: 795px;
+  min-width: 0;
+}
+
+.odds-main__side {
+  width: 300px;
+  flex: none;
+}
+
+/* --- ロゴ（style.css:81-88） --- */
+
+.odds-logo {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.odds-logo img {
+  display: block;
+  margin: 0 auto;
+}
+
+/* --- グローバルメニュー（style.css:97-126） --- */
+
+.odds-gnav {
+  height: 50px;
+  position: absolute;
+  right: -25px;
+  top: 0;
+  font-size: 0;
+}
+
+.odds-gnav > ul {
+  display: inline-block;
+  height: 50px;
+  position: relative;
+  vertical-align: top;
+  font-size: 0;
+}
+
+.odds-gnav > ul > li {
+  position: relative;
+  display: inline-block;
+  height: 100px;
+  line-height: 100px;
+  margin: 0 0 0 10px;
+  font-size: 1%;
+}
+
+.odds-gnav > ul > li > a {
+  display: block;
+  box-sizing: border-box;
+  height: 50px;
+  line-height: 50px;
+  margin: 25px 0 0;
+  padding: 0 25px;
+  overflow: hidden;
+  border-radius: 5px;
+  font-size: 14px;
+  color: #fff;
+  text-decoration: none;
+}
+
+.odds-gnav > ul > li.is-current > a {
+  color: #fff;
+  background-color: var(--odds-active);
+  box-shadow: 1px 1px 3px 2px rgba(0, 0, 0, 0.1) inset;
+}
+
+.odds-gnav a:hover {
+  color: #fff;
+  background-color: var(--odds-active);
+}
+
+.odds-gnav ul ul {
+  display: none;
+  width: 230px;
+  position: absolute;
+  top: 100px;
+  left: 0;
+  margin: 0;
+  padding: 0;
+}
+
+/* 原典は jQuery の hover で slideDown していた。CSS だけで同じ挙動にする。 */
+.odds-gnav > ul > li:hover > ul {
+  display: block;
+}
+
+.odds-gnav ul ul li {
+  display: block;
+  position: relative;
+  margin: 0;
+  padding: 0;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.odds-gnav ul ul a {
+  display: block;
+  position: relative;
+  margin: 0;
+  padding: 14px 25px;
+  height: auto;
+  line-height: 1.6;
+  border: none;
+  box-shadow: none;
+  font-size: 14px;
+  background: #222;
+  color: #fff;
+  text-align: left;
+  transition: all 0.35s ease;
+}
+
+.odds-gnav ul ul a:hover {
+  padding-left: 40px;
+  color: #fff;
+  background-color: var(--odds-active);
+  text-decoration: none;
+}
+
+/* --- サイドバー共通（style.css:260-271） --- */
+
+.side_widget {
+  margin: 0 0 50px;
+  font-size: 14px;
+  position: relative;
+}
+
+.side_widget:last-child {
+  margin: 0;
+}
+
+.side_headline {
+  display: block;
+  height: 50px;
+  margin: 0 0 20px;
+  padding: 0 30px;
+  border-radius: 5px 5px 0 0;
+  background: var(--odds-base);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 50px;
+  text-align: center;
+  font-family: var(--odds-heading-font);
+}
+
+.side_widget ul {
+  margin: 0;
+  list-style: none;
+  padding: 0;
+}
+
+.side_widget li {
+  line-height: 2;
+  padding: 2px 0;
+  margin: 0 0 10px;
+}
+
+.side_widget a {
+  text-decoration: none;
+  color: #000;
+}
+
+.side_widget img {
+  height: auto;
+  max-width: 100%;
+}
+
+.img_block img {
+  display: block;
+  margin: auto;
+}
+
+/* --- 記事リスト（style.css:277-292） --- */
+
+.side_post_list .side_headline {
+  margin: 0 0 -1px;
+  z-index: 2;
+  position: relative;
+}
+
+.side_post_list ol {
+  padding: 20px 0 0;
+  margin: 0;
+  list-style: none;
+}
+
+.side_post_list li {
+  margin: 0 0 20px;
+  padding: 0 0 20px;
+  border-bottom: 1px solid #ddd;
+}
+
+.side_post_list li:last-child {
+  margin: 0;
+}
+
+.side_post_list .info {
+  position: relative;
+  padding: 0 30px 0 0;
+}
+
+/* 原典は Material Icons の chevron_right（\e5cc） */
+.side_post_list .info::after {
+  content: "›";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 24px;
+  color: #111;
+  line-height: 1;
+}
+
+.side_reco_post_list .info::after {
+  color: var(--odds-hover);
+}
+
+.side_post_list .title {
+  display: block;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.7;
+  color: #000;
+  word-wrap: break-word;
+}
+
+.side_post_list .title:hover {
+  color: var(--odds-hover);
+}
+
+.side_post_list .date {
+  display: block;
+  margin: 5px 0 0;
+  line-height: 1;
+  color: #aaa;
+  font-size: 12px;
+}
+
+/* --- カテゴリーリスト（style.css:296-319） --- */
+
+.side_category_list_widget .side_headline {
+  margin: 0 0 -1px;
+  z-index: 2;
+  position: relative;
+}
+
+.side_category_list {
+  margin: 0;
+  padding: 1px 0 0;
+  border-top: 1px solid #ddd;
+}
+
+.side_category_list li {
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.side_category_list a {
+  display: block;
+  box-sizing: border-box;
+  position: relative;
+  height: 50px;
+  line-height: 50px;
+  padding: 0 5px 0 15px;
+  margin: -1px 0 0;
+  border: 1px solid #ddd;
+  background: #fff;
+  font-size: 14px;
+  overflow: hidden;
+}
+
+.side_category_list > li:first-child > a {
+  border-top: none;
+}
+
+.side_category_list a:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.side_category_list li a .count,
+.j-dropdown__list li a .count {
+  float: right;
+  position: relative;
+  top: 4px;
+  height: 40px;
+  line-height: 40px;
+  min-width: 24px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: #bbb;
+  color: #fff;
+  font-size: 11px;
+  text-align: center;
+}
+
+.side_category_list li a:hover .count,
+.j-dropdown__list li a:hover .count {
+  background: var(--odds-hover);
+}
+
+.side_category_list li li a {
+  padding-left: 28px;
+}
+
+/* 子カテゴリは既定で畳んでおき、ホバーで開く（原典は jQuery の slideDown） */
+.side_category_list ul {
+  display: none;
+  margin: 0 !important;
+  padding: 0 !important;
+  position: relative;
+  z-index: 9;
+}
+
+.side_category_list li:hover > ul {
+  display: block;
+}
+
+/* --- アーカイブ（クリックで開閉。style.css:322-345） --- */
+
+.j-dropdown {
+  font-size: 14px;
+}
+
+.j-dropdown__title {
+  box-sizing: border-box;
+  position: relative;
+  width: 100%;
+  height: 50px;
+  padding: 0 18px;
+  border: 1px solid #ddd;
+  background: #fff;
+  line-height: 50px;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 原典は Material Icons の expand_more（\e5cf）/ expand_less（\e5ce） */
+.j-dropdown__title::after {
+  content: "▾";
+  position: absolute;
+  right: 17px;
+}
+
+.j-dropdown__title.is-active::after {
+  content: "▴";
+}
+
+.j-dropdown__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.j-dropdown__list li {
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.j-dropdown__list a {
+  display: block;
+  box-sizing: border-box;
+  position: relative;
+  height: 50px;
+  line-height: 50px;
+  padding: 0 5px 0 15px;
+  margin: -1px 0 0;
+  border: 1px solid #ddd;
+  background: #fff;
+  font-size: 14px;
+  overflow: hidden;
+}
+
+.j-dropdown__list li a:hover {
+  background: #f6f6f6;
+  color: #000;
+}
+
+/* --- 1190px 未満（旧 responsive.css は移植せず、縦積みにするだけ） --- */
+
+@media screen and (max-width: 1190px) {
+  .odds-header__inner,
+  .odds-main {
+    width: auto;
+    max-width: 795px;
+    padding: 0 20px;
+  }
+
+  .odds-main {
+    display: block;
+    margin: 40px auto 60px;
+  }
+
+  .odds-main__left,
+  .odds-main__side {
+    width: auto;
+  }
+
+  .odds-main__side {
+    margin-top: 60px;
+  }
+
+  .odds-gnav {
+    right: 20px;
+  }
+
+  .odds-gnav > ul > li {
+    margin: 0 0 0 2px;
+  }
+
+  .odds-gnav > ul > li > a {
+    padding: 0 12px;
+    font-size: 13px;
+  }
+}
+
+@media screen and (max-width: 640px) {
+  .odds-gnav {
+    display: none;
+  }
+}
+
+/* --- フッター（style.css:368-369 の #footer_bottom のみ） --- */
+
+.odds-footer {
+  width: 100%;
+  background: #222;
+}
+
+.odds-footer__inner {
+  width: 1150px;
+  margin: 0 auto;
+  height: 60px;
+  line-height: 60px;
+  text-align: center;
+  color: #999;
+  font-size: 12px;
+}
+
+.odds-footer a {
+  color: #ccc;
+  text-decoration: none;
+}
+
+.odds-footer a:hover {
+  color: #fff;
+}
+
+.odds-footer__sep {
+  margin: 0 10px;
+  color: #555;
+}
+
+@media screen and (max-width: 1190px) {
+  .odds-footer__inner {
+    width: auto;
+    padding: 0 20px;
+  }
 }
